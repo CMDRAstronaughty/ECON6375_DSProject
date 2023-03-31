@@ -1,0 +1,213 @@
+---
+title: "Data Science Project"
+author: "Sai Myint, Yoojin Oh, Liz Ward, Karl Wirth"
+date: '2023-03-26'
+output: html_document
+---
+
+```{r}
+#Set working directory and load packages
+setwd('/Users/karlwirth/Documents/GitHub/ECON6375_DSProject') # Change this to your directory
+
+#Add any packages you need to this chunk
+library(tidyverse)
+library(table1) #for summary stats tables
+library(data.table)
+library(ggplot2) #for charts
+library(stringr) 
+```
+
+#### 2) Reading in the data (Part 1 was to download the data)
+
+```{r}
+data2020 <- read.csv('/Users/karlwirth/Downloads/2020_lar_csv.csv') #Don't need to run these
+data2021 <- read.csv('/Users/karlwirth/Downloads/2021_public_lar.csv') #This one too
+```
+
+
+#### 3) Filtering by state, appending files, reformatting FIPS and loan amount
+
+```{r}
+#Filtering by state_code "OH"
+OH_data2020 <- filter(data2020, state_code=='OH')
+OH_data2021 <- filter(data2021, state_code=='OH')
+
+#Appending the two datasets together
+combined_df <- rbind(OH_data2020, OH_data2021)
+
+#Formatting county code to only be 3 digits
+combined_df$county_code <- combined_df$county_code - 39000
+
+combined_df$county_code <- ifelse(combined_df$county_code < 100, 
+                                  paste0('0', combined_df$county_code), combined_df$county_code)
+
+#Adding comma thousands separator
+combined_df$loan_amount <- format(combined_df$loan_amount, big.mark=',', scientific=FALSE)
+
+save(combined_df, file='combined_df.Rdata')
+load('combined_df.Rdata') #Start with loading this file and run the code below to make sure the proper variables get added
+```
+
+#### 4) Providing statistical summaries:
+
+##### a) a.	Provide a table of minimum, maximum, and average loan value by loan type. 
+
+```{r}
+combined_df$property_value <- as.numeric(combined_df$property_value) #Converting property
+#value variable to a number in order to summarize (from a character)
+
+#Creating new loan_type_word variable to translate numeric loan types into proper acronyms
+combined_df$loan_type_word <- ifelse(combined_df$loan_type==1, 'Conventional',
+                                     ifelse(combined_df$loan_type==2, 'FHA',
+                                            ifelse(combined_df$loan_type==3, 'VA',
+                                                   ifelse(combined_df$loan_type==4, 'FSA/RHS', 'fail'))))
+
+combined_df %>%
+  group_by(loan_type_word) %>% 
+  summarize(mean = mean(property_value, na.rm=TRUE), #Had to remove NA's to summarize or else
+            min = min(property_value,  na.rm=TRUE),  #it would not run
+            max = max(property_value,  na.rm=TRUE))
+
+
+
+```
+
+##### b) Provide similar information graphically. Provide a grouped bar chart with the average loan value by loan type grouped by year. Label the averages for each bar on the chart. 
+
+```{r}
+combined_df$activity_year <- as.character(combined_df$activity_year) #changing class of activity year to a character and not a number
+
+avg_tbl <- combined_df %>%
+  group_by(loan_type_word, activity_year) %>% 
+  summarize(mean = mean(property_value, na.rm=TRUE), #Had to remove NA's to summarize or else
+            min = min(property_value,  na.rm=TRUE),  #it would not run
+            max = max(property_value,  na.rm=TRUE)) #NOTE: Summarize function, with a z, creates a summary stats table
+
+
+ggplot(avg_tbl, aes(x=loan_type_word, y=mean, fill=activity_year)) + 
+  geom_bar(stat="identity", position=position_dodge()) +
+  scale_y_continuous(limits=c(0,400000), labels = scales::comma) +
+  scale_y_continuous(labels = scales::comma) +
+  geom_text(position = position_dodge(width= 1), aes(y=mean + 15000, fill=activity_year, label=round(mean), hjust=0.5), angle=0) +
+  labs(title="Average Loan Value Mean by Loan Type",
+        x ="Loan Type", y = "Mean Loan Value", fill='Year')
+  
+```
+
+##### c) c.	Provide a table of the average value of rate_spread for 2021 and 2020 by property type.  
+
+```{r}
+combined_df$property_type <- ifelse(combined_df$occupancy_type==1, 'Principal Residence',
+                                    ifelse(combined_df$occupancy_type==2, 'Second Residence',
+                                           ifelse(combined_df$occupancy_type==3, 'Investment Property', 'fail')))
+
+combined_df$rate_spread <- as.numeric(combined_df$rate_spread) 
+
+prop_val_avg <- combined_df %>% group_by(activity_year, property_type) %>%
+  summarise(mean_rate_spread=mean(rate_spread, na.rm=TRUE)) #NOTE: Summarise function, with an s, aggregates values by mean, sum, etc, and groups by certain variables
+
+print(prop_val_avg)
+```
+
+
+##### d) d.	Provide a two-way table of the action taken on the loan by derived_sex. 
+
+```{r}
+combined_df$action_taken_word <- as.numeric(combined_df$action_taken)
+
+#Recoding the numeric values into words
+combined_df$action_taken_word <- ifelse(combined_df$action_taken==1, 'Loan Originated',
+                                    ifelse(combined_df$action_taken==2, 'Application Approved but not Accepted',
+                                           ifelse(combined_df$action_taken==3, 'Application Denied',
+                                                  ifelse(combined_df$action_taken==4, 'Application Withdrawn by Applicant',
+                                                         ifelse(combined_df$action_taken==5, 'File Closed for Incompleteness',
+                                                                ifelse(combined_df$action_taken==6, 'Purchased Loan',
+                                                                       ifelse(combined_df$action_taken==7, 'Preapproval Request Denied',
+                                                                              ifelse(combined_df$action_taken==8, 'Preapproval Request Approved but not Accepted', 
+                                                                                     'fail'))))))))
+
+act_taken_cnt <- table(combined_df$action_taken_word, combined_df$derived_sex) #This creates the two-way table
+print(act_taken_cnt)
+
+```
+
+Examine the “Not Available” category. What percentage of the data falls into this category? Does it the distribution of missing data look random over the different actions taken on loans? 
+
+```{r}
+addmargins(act_taken_cnt) #This is to give totals to answer the question above
+
+pct_NA <- (237823 / 1613713) * 100
+print(pct_NA)
+
+pct_NA_purchased <- (113101 / 148395) * 100
+print(pct_NA_purchased)
+```
+
+14% of the data falls into the category "Sex Not Available". The distribution of missing data looks relatively random over the different actions taken on loans EXCEPT for "Purchased Loans" where sex data is not available for roughly 76% of those observations. For context, missing sex data accounts for roughly 10% of all the other action categories. 
+
+
+##### e) Provide a two-way table of the action taken on the loan by derived_race. 
+
+```{r}
+# Shortening the race names so the table looks neater
+combined_df$derived_race <- ifelse(combined_df$derived_race=='2 or more minority races', '2+ Minority Races',
+                                    ifelse(combined_df$derived_race=='Black or African American', 'Black',
+                                           ifelse(combined_df$derived_race=='Free Form Text Only', 'Free Form Text',
+                                                  ifelse(combined_df$derived_race=='Native Hawaiian or Other Pacific Islander', 'Pacific Islander',
+                                                         ifelse(combined_df$derived_race=='Race Not Available', 'NA', combined_df$derived_race)))))
+
+act_taken_cnt_race <- table(combined_df$action_taken_word, combined_df$derived_race)
+print(act_taken_cnt_race)
+```
+
+
+#### 5) Provide the following statistical summaries
+
+##### a) Same as above
+
+##### b) Same as above
+
+##### c) Provide a table of the average value of loans for 2021 and 2020 by property type
+
+```{r}
+
+prop_val_avg_loan_val <- combined_df %>% group_by(activity_year, property_type) %>%
+  summarise(mean_loan_value=mean(property_value, na.rm=TRUE))
+
+print(prop_val_avg_loan_val)
+```
+
+##### d) Provide a two-way table of the action taken on the loan by preapproval. 
+
+```{r}
+combined_df$preapproval <- ifelse(combined_df$preapproval==1, 'Preapproval Requested',
+                                    ifelse(combined_df$preapproval==2, 'Preapproval Not Requested', 'fail'))
+
+act_taken_cnt_preapproval <- table(combined_df$action_taken_word, combined_df$preapproval)
+print(act_taken_cnt_preapproval)
+
+results <- data.frame(act_taken_cnt_preapproval)
+```
+
+
+iii.	Choose an appropriate graph to represent the data in this table. 
+```{r}
+results$Var1 = str_wrap(results$Var1, width = 10) #Wrapped the long x-axis labels
+
+ggplot(data = results, aes(x = Var1, y = Freq, fill = Var2)) +
+  geom_bar(stat = "identity", position = position_dodge(), alpha = 0.75)  +
+  ylim(0,200000) +
+ # geom_text(aes(label = Freq), fontface = "bold", vjust = 1.5,
+             #position = position_dodge(.9), size = 4) +
+  labs(x = "Action Taken", y = "Frequency\n", title = "Actions Taken by Preapproval Status", fill = 'Preapproval Status') +
+  theme(plot.title = element_text(hjust = 0.5), 
+        axis.title.x = element_text(face="bold", colour="red", size = 12),
+        axis.title.y = element_text(face="bold", colour="red", size = 12),
+        axis.text.x = element_text(angle=0, size=6),
+        legend.title = element_text(face="bold", size = 10))
+```
+
+
+
+
+
