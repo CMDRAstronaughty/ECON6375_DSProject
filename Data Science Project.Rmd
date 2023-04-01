@@ -7,14 +7,15 @@ output: html_document
 
 ```{r}
 #Set working directory and load packages
-setwd('/Users/karlwirth/Documents/GitHub/ECON6375_DSProject') # Change this to your directory
+# setwd('/Users/karlwirth/Documents/GitHub/ECON6375_DSProject') # Change this to your directory
 
 #Add any packages you need to this chunk
 library(tidyverse)
 library(table1) #for summary stats tables
 library(data.table)
 library(ggplot2) #for charts
-library(stringr) 
+library(stringr)
+library(rlang)
 ```
 
 #### 2) Reading in the data (Part 1 was to download the data)
@@ -23,7 +24,6 @@ library(stringr)
 data2020 <- read.csv('/Users/karlwirth/Downloads/2020_lar_csv.csv') #Don't need to run these
 data2021 <- read.csv('/Users/karlwirth/Downloads/2021_public_lar.csv') #This one too
 ```
-
 
 #### 3) Filtering by state, appending files, reformatting FIPS and loan amount
 
@@ -50,7 +50,7 @@ load('combined_df.Rdata') #Start with loading this file and run the code below t
 
 #### 4) Providing statistical summaries:
 
-##### a) a.	Provide a table of minimum, maximum, and average loan value by loan type. 
+##### a) a. Provide a table of minimum, maximum, and average loan value by loan type.
 
 ```{r}
 combined_df$property_value <- as.numeric(combined_df$property_value) #Converting property
@@ -72,7 +72,7 @@ combined_df %>%
 
 ```
 
-##### b) Provide similar information graphically. Provide a grouped bar chart with the average loan value by loan type grouped by year. Label the averages for each bar on the chart. 
+##### b) Provide similar information graphically. Provide a grouped bar chart with the average loan value by loan type grouped by year. Label the averages for each bar on the chart.
 
 ```{r}
 combined_df$activity_year <- as.character(combined_df$activity_year) #changing class of activity year to a character and not a number
@@ -94,7 +94,7 @@ ggplot(avg_tbl, aes(x=loan_type_word, y=mean, fill=activity_year)) +
   
 ```
 
-##### c) c.	Provide a table of the average value of rate_spread for 2021 and 2020 by property type.  
+##### c) c. Provide a table of the average value of rate_spread for 2021 and 2020 by property type.
 
 ```{r}
 combined_df$property_type <- ifelse(combined_df$occupancy_type==1, 'Principal Residence',
@@ -109,8 +109,7 @@ prop_val_avg <- combined_df %>% group_by(activity_year, property_type) %>%
 print(prop_val_avg)
 ```
 
-
-##### d) d.	Provide a two-way table of the action taken on the loan by derived_sex. 
+##### d) d. Provide a two-way table of the action taken on the loan by derived_sex.
 
 ```{r}
 combined_df$action_taken_word <- as.numeric(combined_df$action_taken)
@@ -131,7 +130,7 @@ print(act_taken_cnt)
 
 ```
 
-Examine the “Not Available” category. What percentage of the data falls into this category? Does it the distribution of missing data look random over the different actions taken on loans? 
+Examine the "Not Available" category. What percentage of the data falls into this category? Does it the distribution of missing data look random over the different actions taken on loans?
 
 ```{r}
 addmargins(act_taken_cnt) #This is to give totals to answer the question above
@@ -143,10 +142,9 @@ pct_NA_purchased <- (113101 / 148395) * 100
 print(pct_NA_purchased)
 ```
 
-14% of the data falls into the category "Sex Not Available". The distribution of missing data looks relatively random over the different actions taken on loans EXCEPT for "Purchased Loans" where sex data is not available for roughly 76% of those observations. For context, missing sex data accounts for roughly 10% of all the other action categories. 
+14% of the data falls into the category "Sex Not Available". The distribution of missing data looks relatively random over the different actions taken on loans EXCEPT for "Purchased Loans" where sex data is not available for roughly 76% of those observations. For context, missing sex data accounts for roughly 10% of all the other action categories.
 
-
-##### e) Provide a two-way table of the action taken on the loan by derived_race. 
+##### e) Provide a two-way table of the action taken on the loan by derived_race.
 
 ```{r}
 # Shortening the race names so the table looks neater
@@ -159,7 +157,6 @@ combined_df$derived_race <- ifelse(combined_df$derived_race=='2 or more minority
 act_taken_cnt_race <- table(combined_df$action_taken_word, combined_df$derived_race)
 print(act_taken_cnt_race)
 ```
-
 
 #### 5) Provide the following statistical summaries
 
@@ -177,7 +174,7 @@ prop_val_avg_loan_val <- combined_df %>% group_by(activity_year, property_type) 
 print(prop_val_avg_loan_val)
 ```
 
-##### d) Provide a two-way table of the action taken on the loan by preapproval. 
+##### d) Provide a two-way table of the action taken on the loan by preapproval.
 
 ```{r}
 combined_df$preapproval <- ifelse(combined_df$preapproval==1, 'Preapproval Requested',
@@ -189,8 +186,8 @@ print(act_taken_cnt_preapproval)
 results <- data.frame(act_taken_cnt_preapproval)
 ```
 
+iii. Choose an appropriate graph to represent the data in this table.
 
-iii.	Choose an appropriate graph to represent the data in this table. 
 ```{r}
 results$Var1 = str_wrap(results$Var1, width = 10) #Wrapped the long x-axis labels
 
@@ -207,7 +204,58 @@ ggplot(data = results, aes(x = Var1, y = Freq, fill = Var2)) +
         legend.title = element_text(face="bold", size = 10))
 ```
 
+#### 6) Limit the data set to only loan type equal to "Conventional" for the rest of the analysis
 
+```{r}
+# Loading R Data File
+load("~/Documents/GitHub/ECON6375_DSProject/combined_df.Rdata")
+```
 
+```{r}
+# Filter data
+combined_df_Conventional <- combined_df[combined_df$derived_loan_product_type=="Conventional:First Lien",]
+```
 
+#### 7) Create a new data set that is summary statistics by year and county: It should include:
 
+a) Average interest rate per county
+
+b) Percentage of actions taken for loan origination (Loan originated vs all other values)
+
+c) Percentage of debt_to_income ratio that are less than 40%
+
+d) Percentage of loans that are for business or commercial purpose.
+
+e) Percentage of loans that are "investment Property" (category of occupancy types)
+
+```{r}
+# Change Column data types
+combined_df_Conventional$interest_rate <- as.numeric(combined_df_Conventional$interest_rate)
+
+# Check data type of columns
+str(combined_df_Conventional)
+```
+
+```{r}
+# Group the data by year and county
+summary_tbl <- combined_df_Conventional %>% group_by(activity_year,county_code) %>%
+  summarise(mean_interest = mean(interest_rate,na.rm = TRUE),
+            action_taken_percent = (n_distinct(action_taken)/sum(action_taken))*100,
+            debt_to_income_percent = all(debt_to_income_ratio<40)/sum(debt_to_income_ratio),
+            .groups = 'drop') %>%
+  as.data.frame()
+```
+
+```{r}
+test <- mean(c(combined_df_Conventional$interest_rate))
+```
+
+#### 8) For the count of loan approvals by year and county, do the following
+
+##### a) Reshape the data from long to wide, making each county a single row of data with a column for the 2021 count and a county with the 2020 count
+
+##### b) Create a new variable with the percentage difference between 2021 and 2020
+
+##### c) Print the ten counties with the largest percent changes as percent with 2 decimal places
+
+#### 9) Get county level unemployment data for 2021 & 2020 from BLS
