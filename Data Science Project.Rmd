@@ -218,43 +218,92 @@ combined_df_Conventional <- combined_df[combined_df$derived_loan_product_type=="
 
 #### 7) Create a new data set that is summary statistics by year and county: It should include:
 
-a) Average interest rate per county
+a)  Average interest rate per county
 
-b) Percentage of actions taken for loan origination (Loan originated vs all other values)
+b)  Percentage of actions taken for loan origination (Loan originated vs all other values)
 
-c) Percentage of debt_to_income ratio that are less than 40%
+c)  Percentage of debt_to_income ratio that are less than 40%
 
-d) Percentage of loans that are for business or commercial purpose.
+d)  Percentage of loans that are for business or commercial purpose.
 
-e) Percentage of loans that are "investment Property" (category of occupancy types)
+e)  Percentage of loans that are "investment Property" (category of occupancy types)
 
 ```{r}
 # Change Column data types
 combined_df_Conventional$interest_rate <- as.numeric(combined_df_Conventional$interest_rate)
 
 # Check data type of columns
-str(combined_df_Conventional)
+# str(combined_df_Conventional)
 ```
 
 ```{r}
-# Group the data by year and county
-summary_tbl <- combined_df_Conventional %>% group_by(activity_year,county_code) %>%
+# Group the data by year and county 7a-7b
+summary_tbl1 <- combined_df_Conventional %>% 
+  group_by(activity_year,county_code) %>%
   summarise(mean_interest = mean(interest_rate,na.rm = TRUE),
             action_taken_percent = (n_distinct(action_taken)/sum(action_taken))*100,
-            debt_to_income_percent = all(debt_to_income_ratio<40)/sum(debt_to_income_ratio),
             .groups = 'drop') %>%
   as.data.frame()
 ```
 
 ```{r}
-test <- mean(c(combined_df_Conventional$interest_rate))
+# 7c
+summary_tbl2 <- combined_df_Conventional %>% 
+  filter(debt_to_income_ratio < 40) %>% 
+  group_by(activity_year,county_code) %>% 
+  summarise(cnt = n(),.groups = 'drop') %>%
+  mutate(dti_percentage = round(cnt/sum(cnt),3)*100) %>% 
+
+  as.data.frame()
+```
+
+```{r}
+# 7d
+# According to the data dictionary, business or commerical purpose is any value = 1 all other is considered not for B/C purpose or exempt
+
+summary_tbl3 <- combined_df_Conventional %>%
+  filter(business_or_commercial_purpose == 1) %>%
+  group_by(activity_year,county_code) %>%
+  summarise(cnt=n(),.groups = 'drop') %>%
+  mutate(business_commerical_percent = round(cnt/sum(cnt),3)*100) %>%
+  
+  as.data.frame()
+```
+
+```{r}
+# 7e
+# According to the data dictionary, values of 3 are considered investment property. All other values are considered either primary or secondary residences.
+
+summary_tbl4 <- combined_df_Conventional %>%
+  filter(occupancy_type == 3) %>%
+  group_by(activity_year,county_code) %>%
+  summarise(cnt=n(),.groups = 'drop') %>%
+  mutate(investment_property_percent = round(cnt/sum(cnt),3)*100) %>%
+  as.data.frame()
+```
+
+```{r}
+# Combine summary tables 2-4 into summary table (summary_tbl)
+summary_tbl <- cbind(summary_tbl1,dti_percentage = summary_tbl2$dti_percentage)
+summary_tbl <- cbind(summary_tbl,business_commerical_percentage = summary_tbl3$business_commerical_percent)
+summary_tbl <- cbind(summary_tbl,investment_percentage = summary_tbl4$investment_property_percent)
 ```
 
 #### 8) For the count of loan approvals by year and county, do the following
 
 ##### a) Reshape the data from long to wide, making each county a single row of data with a column for the 2021 count and a county with the 2020 count
 
+```{r}
+# Reshape Data
+summary_tbl_reshape <- reshape(summary_tbl,idvar = "county_code",timevar = "activity_year",direction = 'wide')
+```
+
 ##### b) Create a new variable with the percentage difference between 2021 and 2020
+
+```{r}
+# Here we'll take the absolute value as a function of the difference. So |2021 - 2020| for the percentages
+
+```
 
 ##### c) Print the ten counties with the largest percent changes as percent with 2 decimal places
 
