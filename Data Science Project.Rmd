@@ -206,6 +206,8 @@ ggplot(data = results, aes(x = Var1, y = Freq, fill = Var2)) +
 
 #### 6) Limit the data set to only loan type equal to "Conventional" for the rest of the analysis
 
+Data Dictionary: <https://ffiec.cfpb.gov/documentation/2020/lar-data-fields/#countycode>
+
 ```{r}
 # Loading R Data File
 load("~/Documents/GitHub/ECON6375_DSProject/combined_df.Rdata")
@@ -237,23 +239,36 @@ combined_df_Conventional$interest_rate <- as.numeric(combined_df_Conventional$in
 ```
 
 ```{r}
-# Group the data by year and county 7a-7b
-summary_tbl1 <- combined_df_Conventional %>% 
+# Average Interest Rate 7A
+mean_table <- combined_df_Conventional %>% 
   group_by(activity_year,county_code) %>%
-  summarise(mean_interest = mean(interest_rate,na.rm = TRUE),
-            action_taken_percent = (n_distinct(action_taken)/sum(action_taken))*100,
-            .groups = 'drop') %>%
+  summarise(mean_interest = mean(interest_rate,na.rm = TRUE),.groups = 'drop') %>%
   as.data.frame()
 ```
 
 ```{r}
-# 7c
-summary_tbl2 <- combined_df_Conventional %>% 
-  filter(debt_to_income_ratio < 40) %>% 
-  group_by(activity_year,county_code) %>% 
-  summarise(cnt = n(),.groups = 'drop') %>%
-  mutate(dti_percentage = round(cnt/sum(cnt),3)*100) %>% 
+# Action Taken Percentages 7B
+actionTaken_table<- combined_df_Conventional %>%
+  group_by(activity_year,county_code) %>%
+  summarise(total_cnt = n(),
+            action_cnts = sum(action_taken > 1),.groups = 'drop') %>%
+  mutate(action_taken_percentage = (action_cnts/total_cnt)*100) %>%
+  as.data.frame()
+```
 
+```{r}
+# Debt to Income Ration less than 40% 7C
+dti_table <- combined_df_Conventional %>% 
+  group_by(activity_year,county_code) %>% 
+  summarise(total_cnt = n(),
+            less_cnts = sum(debt_to_income_ratio == "<20%",na.rm = TRUE),
+            less_cnts2 = sum(debt_to_income_ratio == "20%-<30%",na.rm = TRUE),
+            less_cnts3 = sum(debt_to_income_ratio == "30%-<36%",na.rm = TRUE),
+            less_cnts4 = sum(debt_to_income_ratio == "37%",na.rm = TRUE),
+            less_cnts5 = sum(debt_to_income_ratio == "38%",na.rm = TRUE),
+            less_cnts6 = sum(debt_to_income_ratio == "39%",na.rm = TRUE),
+            .groups = 'drop') %>%
+  mutate(dti_percentage = ((less_cnts+less_cnts2+less_cnts3+less_cnts4+less_cnts5+less_cnts6)/total_cnt)*100) %>% 
   as.data.frame()
 ```
 
@@ -261,12 +276,12 @@ summary_tbl2 <- combined_df_Conventional %>%
 # 7d
 # According to the data dictionary, business or commerical purpose is any value = 1 all other is considered not for B/C purpose or exempt
 
-summary_tbl3 <- combined_df_Conventional %>%
-  filter(business_or_commercial_purpose == 1) %>%
+business_table <- combined_df_Conventional %>%
   group_by(activity_year,county_code) %>%
-  summarise(cnt=n(),.groups = 'drop') %>%
-  mutate(business_commerical_percent = round(cnt/sum(cnt),3)*100) %>%
-  
+  summarise(total_cnts=n(),
+            business_cnts = sum(business_or_commercial_purpose == 1),
+            .groups = 'drop') %>%
+  mutate(business_percentage = (business_cnts/total_cnts)*100) %>%
   as.data.frame()
 ```
 
@@ -274,19 +289,21 @@ summary_tbl3 <- combined_df_Conventional %>%
 # 7e
 # According to the data dictionary, values of 3 are considered investment property. All other values are considered either primary or secondary residences.
 
-summary_tbl4 <- combined_df_Conventional %>%
-  filter(occupancy_type == 3) %>%
+investment_table <- combined_df_Conventional %>%
   group_by(activity_year,county_code) %>%
-  summarise(cnt=n(),.groups = 'drop') %>%
-  mutate(investment_property_percent = round(cnt/sum(cnt),3)*100) %>%
+  summarise(total_cnts=n(),
+            investment_cnts = sum(occupancy_type == 3),
+            .groups = 'drop') %>%
+  mutate(investment_percentage = (investment_cnts/total_cnts)*100) %>%
   as.data.frame()
 ```
 
 ```{r}
-# Combine summary tables 2-4 into summary table (summary_tbl)
-summary_tbl <- cbind(summary_tbl1,dti_percentage = summary_tbl2$dti_percentage)
-summary_tbl <- cbind(summary_tbl,business_commerical_percentage = summary_tbl3$business_commerical_percent)
-summary_tbl <- cbind(summary_tbl,investment_percentage = summary_tbl4$investment_property_percent)
+# Combine all summary tables into a final summary table (summary_tbl)
+summary_tbl <- cbind(mean_table,action_percentage = actionTaken_table$action_taken_percentage)
+summary_tbl <- cbind(summary_tbl,dti_percentage = dti_table$dti_percentage)
+summary_tbl <- cbind(summary_tbl,business_commerical_percent = business_table$business_percentage)
+summary_tbl <- cbind(summary_tbl,investment_percentage = investment_table$investment_percentage)
 ```
 
 #### 8) For the count of loan approvals by year and county, do the following
@@ -295,16 +312,27 @@ summary_tbl <- cbind(summary_tbl,investment_percentage = summary_tbl4$investment
 
 ```{r}
 # Reshape Data
-summary_tbl_reshape <- reshape(summary_tbl,idvar = "county_code",timevar = "activity_year",direction = 'wide')
+reshape_summary <- reshape(summary_tbl,idvar = "county_code",timevar = "activity_year",direction = 'wide')
 ```
 
 ##### b) Create a new variable with the percentage difference between 2021 and 2020
 
 ```{r}
-# Here we'll take the absolute value as a function of the difference. So |2021 - 2020| for the percentages
+# Simply subtracting the Loan Approval Percentage in 2021 - 2020
+delta_loan_approval<- with(reshape_summary, signif(action_percentage.2021 - action_percentage.2020,3))
 
+delta_loan_approval
 ```
 
 ##### c) Print the ten counties with the largest percent changes as percent with 2 decimal places
+
+```{r}
+# Squaring the data so that negative values becomes positive, and we can compaire on a similar scale.
+new_delta <- abs(delta_loan_approval)
+
+# Loading new_delta to a dataframe and combinding it into reshape summary to compare which county had the largest change
+delta_approval <- data.frame(delta_approval = new_delta)
+reshape_summary <- cbind(reshape_summary,delta_approval = delta_approval$delta_approval)
+```
 
 #### 9) Get county level unemployment data for 2021 & 2020 from BLS
