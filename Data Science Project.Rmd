@@ -306,6 +306,12 @@ summary_tbl <- cbind(summary_tbl,business_commerical_percent = business_table$bu
 summary_tbl <- cbind(summary_tbl,investment_percentage = investment_table$investment_percentage)
 ```
 
+```{r}
+# Clean Up space and memory
+rm(mean_table,actionTaken_table,dti_table,business_table,investment_table)
+gc()
+```
+
 #### 8) For the count of loan approvals by year and county, do the following
 
 ##### a) Reshape the data from long to wide, making each county a single row of data with a column for the 2021 count and a county with the 2020 count
@@ -320,8 +326,6 @@ reshape_summary <- reshape(summary_tbl,idvar = "county_code",timevar = "activity
 ```{r}
 # Simply subtracting the Loan Approval Percentage in 2021 - 2020
 delta_loan_approval<- with(reshape_summary, signif(action_percentage.2021 - action_percentage.2020,3))
-
-delta_loan_approval
 ```
 
 ##### c) Print the ten counties with the largest percent changes as percent with 2 decimal places
@@ -335,4 +339,21 @@ delta_approval <- data.frame(delta_approval = new_delta)
 reshape_summary <- cbind(reshape_summary,delta_approval = delta_approval$delta_approval)
 ```
 
+```{r}
+# Print Top 10 Counties with largest percentage changes
+largest_changes <- reshape_summary %>%
+  arrange(desc(delta_approval)) %>%
+  slice(1:10)
+  
+print(largest_changes$county_code)
+```
+
+```{r}
+# Clean Up unused dataframes and variables
+rm(delta_approval,largest_changes,delta_loan_approval,new_delta)
+gc()
+```
+
 #### 9) Get county level unemployment data for 2021 & 2020 from BLS
+
+<https://www.bls.gov/lau/#cntyaa>
